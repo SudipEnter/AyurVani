@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ayurvani-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - OPENSEARCH_ENDPOINT=${OPENSEARCH_ENDPOINT}
+      - DYNAMODB_TABLE=${DYNAMODB_TABLE:-ayurvani-sessions}
+      - S3_BUCKET=${S3_BUCKET:-ayurvani-data}
+      - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      - localstack
+    networks:
+      - ayurvani-net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/web
+      dockerfile: Dockerfile
+    container_name: ayurvani-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - ayurvani-net
+    restart: unless-stopped
+
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: ayurvani-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,s3,opensearch
+      - DEFAULT_REGION=us-east-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - ayurvani-net
+
+volumes:
+  localstack-data:
+
+networks:
+  ayurvani-net:
+    driver: bridge

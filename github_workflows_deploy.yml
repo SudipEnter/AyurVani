@@ -1,0 +1,67 @@
+name: Deploy to AWS
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    branches: [main]
+    types: [completed]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+
+      - name: Terraform Init
+        working-directory: ./infrastructure/terraform
+        run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+
+      - name: Terraform Plan
+        working-directory: ./infrastructure/terraform
+        run: terraform plan -out=tfplan -var="image_tag=${{ github.sha }}"
+
+      - name: Terraform Apply
+        working-directory: ./infrastructure/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Update ECS Service
+        run: |
+          aws ecs update-service \
+            --cluster ayurvani-cluster \
+            --service ayurvani-backend \
+            --force-new-deployment
+          aws ecs update-service \
+            --cluster ayurvani-cluster \
+            --service ayurvani-frontend \
+            --force-new-deployment
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster ayurvani-cluster \
+            --services ayurvani-backend ayurvani-frontend
+
+      - name: Smoke test
+        run: |
+          ENDPOINT=$(terraform -chdir=infrastructure/terraform output -raw api_endpoint)
+          curl --fail --retry 5 --retry-delay 10 "$ENDPOINT/health"
