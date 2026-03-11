@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+venv/
+.env
+
+# Node
+node_modules/
+frontend/web/dist/
+frontend/mobile/.expo/
+
+# Data
+data/embeddings/*.npy
+data/embeddings/*.json
+*.ipynb_checkpoints/
+
+# Terraform
+.terraform/
+*.tfstate*
+*.tfplan
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
